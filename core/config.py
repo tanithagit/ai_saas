@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
     
+    otp_expire_minutes: int = 5
+    otp_max_retries: int = 3
+    refresh_token_expire_days: int = 7
+
     cors_origins: str = "http://localhost:3000"
 
 

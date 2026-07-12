@@ -13,6 +13,7 @@ from core.database import Base
 
 # Import all models here so Alembic can detect them for autogenerate
 from models.user import User  # noqa
+from models.tenant import Tenant
 
 config = context.config
 

@@ -2,10 +2,10 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-
-from core.config import settings
 from fastapi.middleware.cors import CORSMiddleware
 
+from core.config import settings
+from routes import auth
 
 # --- Logging setup ---
 logging.basicConfig(
@@ -26,6 +26,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth.router)
+
 
 # --- Global exception handler ---
 @app.exception_handler(Exception)
