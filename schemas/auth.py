@@ -1,6 +1,6 @@
 import re
 from typing import Optional
-
+from typing import Literal
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 from models.user import AccountType
@@ -55,8 +55,7 @@ class VerifyOtpRequest(BaseModel):
 
 
 class ResendOtpRequest(BaseModel):
-    purpose: str = "registration"
-
+    purpose: Literal["registration", "forgot_password"] = "registration"
 
 class MessageResponse(BaseModel):
     message: str

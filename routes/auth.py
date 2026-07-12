@@ -7,7 +7,7 @@ from core.security import hash_password, verify_password
 from core.jwt_handler import create_otp_token, decode_token, create_access_token, create_refresh_token
 from core.otp_utils import generate_otp, send_otp_email
 from models.user import User
-from schemas.auth import RegisterRequest, RegisterResponse, VerifyOtpRequest, MessageResponse, LoginRequest, LoginResponse, ForgotPasswordRequest, VerifyForgotOtpRequest, ResetPasswordRequest
+from schemas.auth import RegisterRequest, RegisterResponse, VerifyOtpRequest, MessageResponse, ResendOtpRequest, LoginRequest, LoginResponse, ForgotPasswordRequest, VerifyForgotOtpRequest, ResetPasswordRequest
 
 
 
@@ -133,6 +133,45 @@ def verify_otp(
 
     response.delete_cookie("otp_token")
     return MessageResponse(message="Account verified and activated successfully.")
+@router.post("/resend-otp", response_model=MessageResponse)
+def resend_otp(
+    payload: ResendOtpRequest,
+    request: Request,
+    response: Response,
+):
+    # Determine which OTP session is active: registration or forgot-password
+    cookie_name = "otp_token" if payload.purpose == "registration" else "forgot_otp_token"
+    otp_token = request.cookies.get(cookie_name)
+
+    if not otp_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No pending OTP session found. Please start the process again.",
+        )
+
+    token_data = decode_token(otp_token)
+    if not token_data or token_data.get("type") != "otp":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP session expired. Please start the process again.",
+        )
+
+    if token_data.get("purpose") != payload.purpose:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP purpose mismatch.")
+
+    # Generate a fresh OTP, reset retry_count, keep the same pending data (registration fields or email)
+    new_otp = generate_otp()
+    pending_data = {k: v for k, v in token_data.items() if k not in ("exp", "type", "purpose", "retry_count", "otp")}
+    pending_data["otp"] = new_otp
+
+    new_token = create_otp_token(pending_data, purpose=payload.purpose, retry_count=0)
+    response.set_cookie(
+        key=cookie_name, value=new_token, httponly=True, secure=False, samesite="lax", max_age=5 * 60
+    )
+
+    send_otp_email(token_data["sub"], new_otp, purpose=payload.purpose)
+
+    return MessageResponse(message="A new OTP has been sent to your email.")
 
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
