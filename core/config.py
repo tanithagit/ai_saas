@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     otp_expire_minutes: int = 5
     otp_max_retries: int = 3
     refresh_token_expire_days: int = 7
+    
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: str
+    smtp_password: str
+    smtp_from_email: str
+    smtp_from_name: str = "AI SaaS Backend"
 
     cors_origins: str = "http://localhost:3000"
 
