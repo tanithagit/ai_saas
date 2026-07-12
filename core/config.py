@@ -32,7 +32,16 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]
+    
 
+    test_db_name: str = "ai_saas_test_db"
+
+    @property
+    def test_database_url(self) -> str:
+        return (
+            f"mysql+pymysql://{self.db_user}:{self.db_password}"
+            f"@{self.db_host}:{self.db_port}/{self.test_db_name}"
+        )
 
     class Config:
         env_file = ".env"

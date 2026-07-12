@@ -1,20 +1,33 @@
-from fastapi import APIRouter, HTTPException, status, Response, Request
+from fastapi import APIRouter, HTTPException, status, Response, Request, Depends
 from sqlalchemy.orm import Session
-from fastapi import Depends
-
+from fastapi.responses import JSONResponse
 from core.database import get_db
-from core.security import hash_password, verify_password
-from core.jwt_handler import create_otp_token, decode_token, create_access_token, create_refresh_token
-from core.otp_utils import generate_otp, send_otp_email
-from models.user import User
-from schemas.auth import RegisterRequest, RegisterResponse, VerifyOtpRequest, MessageResponse, ResendOtpRequest, LoginRequest, LoginResponse, ForgotPasswordRequest, VerifyForgotOtpRequest, ResetPasswordRequest
-
-
-
-from models.tenant import Tenant
 from core.config import settings
+from core.security import hash_password, verify_password
+from core.jwt_handler import (
+    decode_token,
+    create_otp_token,
+    create_access_token,
+    create_refresh_token,
+)
+from core.otp_utils import generate_otp, send_otp_email
 from core.deps import get_current_user
 
+from models.user import User
+from models.tenant import Tenant
+
+from schemas.auth import (
+    RegisterRequest,
+    RegisterResponse,
+    VerifyOtpRequest,
+    ResendOtpRequest,
+    MessageResponse,
+    LoginRequest,
+    LoginResponse,
+    ForgotPasswordRequest,
+    VerifyForgotOtpRequest,
+    ResetPasswordRequest,
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -95,14 +108,15 @@ def verify_otp(
 
     # OTP mismatch
     if payload.otp != token_data.get("otp"):
-        # Re-issue token with incremented retry_count (same data, same expiry window remains via JWT exp)
         new_pending = {k: v for k, v in token_data.items() if k not in ("exp", "type", "purpose", "retry_count")}
         new_token = create_otp_token(new_pending, purpose="registration", retry_count=retry_count + 1)
-        response.set_cookie(
+
+        error_response = JSONResponse(status_code=400, content={"detail": "Invalid OTP."})
+        error_response.set_cookie(
             key="otp_token", value=new_token, httponly=True, secure=False, samesite="lax", max_age=5 * 60
         )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP.")
-
+        return error_response
+    
     # OTP correct -> double-check email still unique (race condition safety)
     email = token_data["sub"]
     existing_user = db.query(User).filter(User.email == email).first()
@@ -243,6 +257,36 @@ def forgot_password(payload: ForgotPasswordRequest, response: Response, db: Sess
 
     return MessageResponse(message="If this email is registered, an OTP has been sent.")
 
+
+@router.post("/refresh-token", response_model=MessageResponse)
+def refresh_token_endpoint(request: Request, response: Response, db: Session = Depends(get_db)):
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token missing. Please log in again.")
+
+    token_data = decode_token(token)
+    if not token_data or token_data.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token. Please log in again.")
+
+    user = db.query(User).filter(User.id == int(token_data["sub"])).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive.")
+
+    # Issue new access token
+    new_access_token = create_access_token(user.id, user.email)
+    response.set_cookie(
+        key="access_token", value=new_access_token, httponly=True, secure=False,
+        samesite="lax", max_age=settings.jwt_access_token_expire_minutes * 60,
+    )
+
+    # Optional rotation: issue a new refresh token too
+    new_refresh_token = create_refresh_token(user.id)
+    response.set_cookie(
+        key="refresh_token", value=new_refresh_token, httponly=True, secure=False,
+        samesite="lax", max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+    )
+
+    return MessageResponse(message="Access token refreshed successfully.")
 
 @router.post("/verify-forgot-otp", response_model=MessageResponse)
 def verify_forgot_otp(payload: VerifyForgotOtpRequest, request: Request, response: Response):
