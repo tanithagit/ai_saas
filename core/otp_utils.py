@@ -43,7 +43,8 @@ def send_otp_email(to_email: str, otp: str, purpose: str = "registration"):
             server.login(settings.smtp_username, settings.smtp_password)
             server.sendmail(settings.smtp_from_email, to_email, message.as_string())
         logger.info(f"OTP email sent successfully to {to_email} ({purpose})")
+        if settings.debug:
+            logger.info(f"[DEV DEBUG] OTP for {to_email} ({purpose}): {otp}")
     except Exception as e:
         logger.error(f"Failed to send OTP email to {to_email}: {e}")
-        # Fallback: still log the OTP so registration flow isn't completely blocked in dev
         logger.info(f"[FALLBACK] OTP for {to_email} ({purpose}): {otp}")

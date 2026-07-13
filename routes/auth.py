@@ -15,7 +15,7 @@ from core.deps import get_current_user
 
 from models.user import User
 from models.tenant import Tenant
-
+from models.user import User, UserRole
 from schemas.auth import (
     RegisterRequest,
     RegisterResponse,
@@ -125,11 +125,13 @@ def verify_otp(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is already registered.")
 
     # Create User
+    
     new_user = User(
         full_name=token_data["full_name"],
         email=email,
         password_hash=token_data["password_hash"],
         account_type=token_data["account_type"],
+        role=UserRole.tenant_admin if token_data["account_type"] == "organization" else None,
         is_active=True,
     )
     db.add(new_user)
@@ -143,6 +145,10 @@ def verify_otp(
             owner_user_id=new_user.id,
         )
         db.add(new_tenant)
+        db.commit()
+        db.refresh(new_tenant)
+
+        new_user.tenant_id = new_tenant.id
         db.commit()
 
     response.delete_cookie("otp_token")

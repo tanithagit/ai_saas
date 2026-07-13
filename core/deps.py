@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.jwt_handler import decode_token
-from models.user import User
+from models.user import User, UserRole
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -26,3 +26,12 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive.")
 
     return user
+
+
+def get_current_tenant_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != UserRole.tenant_admin or not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Tenant Admins can perform this action.",
+        )
+    return current_user

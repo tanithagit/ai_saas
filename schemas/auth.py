@@ -10,6 +10,13 @@ PASSWORD_REGEX = re.compile(
     r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$"
 )
 
+PERSONAL_EMAIL_DOMAINS = {
+    "gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"
+}
+
+FREE_EMAIL_DOMAINS = {
+    "gmail.com", "yahoo.com", "outlook.com", "hotmail.com"
+}
 
 class RegisterRequest(BaseModel):
     full_name: str
@@ -34,16 +41,25 @@ class RegisterRequest(BaseModel):
         if self.password != self.confirm_password:
             raise ValueError("Password and Confirm Password do not match.")
 
-        if self.account_type == AccountType.organization:
+        domain = self.email.split("@")[-1].lower()
+
+        if self.account_type == AccountType.individual:
+            if domain not in PERSONAL_EMAIL_DOMAINS:
+                raise ValueError(
+                    "Individual accounts must use a personal email address "
+                    "(gmail.com, yahoo.com, outlook.com, hotmail.com, icloud.com)."
+                )
+
+        elif self.account_type == AccountType.organization:
             if not self.organization_name or not self.organization_name.strip():
                 raise ValueError("Organization Name is required for Organization accounts.")
-            # Basic official/business email check: reject common free email domains
-            free_domains = {"gmail.com", "yahoo.com", "outlook.com", "hotmail.com"}
-            domain = self.email.split("@")[-1].lower()
-            if domain in free_domains:
-                raise ValueError("Please use an official business email for Organization accounts.")
-        return self
+            if domain in FREE_EMAIL_DOMAINS:
+                raise ValueError(
+                    "Organization accounts must use an official business email address, "
+                    "not a personal email provider."
+                )
 
+        return self
 
 class RegisterResponse(BaseModel):
     message: str

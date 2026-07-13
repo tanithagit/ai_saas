@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import settings
-from routes import auth
+from routes import auth, tenants
 
 # --- Logging setup ---
 logging.basicConfig(
@@ -28,6 +28,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(tenants.router)
 
 
 # --- Global exception handler ---
