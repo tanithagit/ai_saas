@@ -35,3 +35,11 @@ def get_current_tenant_admin(current_user: User = Depends(get_current_user)) -> 
             detail="Only Tenant Admins can perform this action.",
         )
     return current_user
+
+def get_current_org_user(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This action is only available to organization accounts.",
+        )
+    return current_user

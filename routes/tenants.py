@@ -1,25 +1,65 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.deps import get_current_tenant_admin
+from core.deps import get_current_tenant_admin, get_current_org_user
 from core.security import hash_password
-from core.jwt_handler import create_otp_token
-from core.otp_utils import generate_otp, send_otp_email
 
 from models.user import User, UserRole, AccountType
+from models.tenant import Tenant
 
-from schemas.tenant import CreateTenantUserRequest, TenantUserResponse
-from typing import List
-from schemas.tenant import UpdateTenantUserRequest
-from schemas.tenant import UpdateStatusRequest
+from schemas.tenant import (
+    CreateTenantUserRequest,
+    TenantUserResponse,
+    UpdateTenantUserRequest,
+    UpdateStatusRequest,
+    
+)
 from schemas.auth import MessageResponse
+from schemas.profile import OrganizationProfileResponse, UpdateOrganizationRequest
 
-router = APIRouter(prefix="/tenant", tags=["Tenant"])
+tenant_user_router = APIRouter(prefix="/organizations", tags=["Tenant User"])
+
+org_router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
 
-@router.post("/create-user", response_model=TenantUserResponse)
-def create_tenant_user(
+# --- Organization Profile ---
+
+@org_router.get("/profile", response_model=OrganizationProfileResponse)
+def get_organization_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_org_user),
+):
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+    return tenant
+
+
+@org_router.put("/profile", response_model=OrganizationProfileResponse)
+def update_organization_profile(
+    payload: UpdateOrganizationRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_tenant_admin),
+):
+    tenant = db.query(Tenant).filter(Tenant.id == admin.tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found.")
+
+    if payload.organization_name:
+        tenant.organization_name = payload.organization_name
+
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+
+# --- Tenant User Management (/organizations/users/*) ---
+
+@tenant_user_router.post("/users/invite", response_model=TenantUserResponse)
+def invite_organization_user(
     payload: CreateTenantUserRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_tenant_admin),
@@ -35,42 +75,47 @@ def create_tenant_user(
         account_type=AccountType.organization,
         role=UserRole.member,
         tenant_id=admin.tenant_id,
-        is_active=True,  # created directly active by trusted admin, no OTP needed
+        is_active=True,
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-
     return new_user
 
-@router.get("/users", response_model=List[TenantUserResponse])
-def list_tenant_users(
+
+@tenant_user_router.get("/users", response_model=List[TenantUserResponse])
+def list_organization_users(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_tenant_admin),
 ):
-    users = db.query(User).filter(User.tenant_id == admin.tenant_id).all()
+    users = db.query(User).filter(User.tenant_id == admin.tenant_id, User.is_deleted == False).all()
     return users
 
-@router.get("/users/{user_id}", response_model=TenantUserResponse)
-def get_tenant_user(
+
+@tenant_user_router.get("/users/{user_id}", response_model=TenantUserResponse)
+def get_organization_user(
     user_id: int,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_tenant_admin),
 ):
-    user = db.query(User).filter(User.id == user_id, User.tenant_id == admin.tenant_id).first()
+    user = db.query(User).filter(
+        User.id == user_id, User.tenant_id == admin.tenant_id, User.is_deleted == False
+    ).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found in your organization.")
     return user
 
 
-@router.put("/users/{user_id}", response_model=TenantUserResponse)
-def update_tenant_user(
+@tenant_user_router.put("/users/{user_id}", response_model=TenantUserResponse)
+def update_organization_user(
     user_id: int,
     payload: UpdateTenantUserRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_tenant_admin),
 ):
-    user = db.query(User).filter(User.id == user_id, User.tenant_id == admin.tenant_id).first()
+    user = db.query(User).filter(
+        User.id == user_id, User.tenant_id == admin.tenant_id, User.is_deleted == False
+    ).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found in your organization.")
 
@@ -87,14 +132,17 @@ def update_tenant_user(
     db.refresh(user)
     return user
 
-@router.patch("/users/{user_id}/status", response_model=TenantUserResponse)
-def update_tenant_user_status(
+
+@tenant_user_router.patch("/users/{user_id}/status", response_model=TenantUserResponse)
+def update_organization_user_status(
     user_id: int,
     payload: UpdateStatusRequest,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_tenant_admin),
 ):
-    user = db.query(User).filter(User.id == user_id, User.tenant_id == admin.tenant_id).first()
+    user = db.query(User).filter(
+        User.id == user_id, User.tenant_id == admin.tenant_id, User.is_deleted == False
+    ).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found in your organization.")
 
@@ -106,8 +154,8 @@ def update_tenant_user_status(
     db.refresh(user)
     return user
 
-@router.delete("/users/{user_id}", response_model=MessageResponse)
-def delete_tenant_user(
+@tenant_user_router.delete("/users/{user_id}", response_model=MessageResponse)
+def delete_organization_user(
     user_id: int,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_tenant_admin),

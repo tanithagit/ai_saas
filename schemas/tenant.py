@@ -2,7 +2,7 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
 
 from schemas.auth import PASSWORD_REGEX
-
+from models.user import UserRole
 
 class CreateTenantUserRequest(BaseModel):
     full_name: str
@@ -50,3 +50,6 @@ class UpdateStatusRequest(BaseModel):
 class VerifyInvitedUserRequest(BaseModel):
     token: str
     otp: str
+
+class UpdateRoleRequest(BaseModel):
+    role: UserRole
