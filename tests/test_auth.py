@@ -16,14 +16,14 @@ class TestRegistration:
     def test_individual_registration_success(self, client):
         response = client.post("/auth/register", json={
             "full_name": "John Doe",
-            "email": "john.individual@example.com",
+            "email": "john.individual@gmail.com",
             "password": VALID_PASSWORD,
             "confirm_password": VALID_PASSWORD,
             "account_type": "individual",
             "organization_name": None,
         })
         assert response.status_code == 200
-        assert response.json()["email"] == "john.individual@example.com"
+        assert response.json()["email"] == "john.individual@gmail.com"
         assert extract_cookie(response, "otp_token") is not None
 
     def test_organization_registration_success(self, client):
@@ -88,7 +88,7 @@ class TestRegistration:
 
         existing = User(
             full_name="Existing User",
-            email="existing@example.com",
+            email="existing@gmail.com",
             password_hash=hash_password(VALID_PASSWORD),
             account_type=AccountType.individual,
             is_active=True,
@@ -98,7 +98,7 @@ class TestRegistration:
 
         response = client.post("/auth/register", json={
             "full_name": "Someone Else",
-            "email": "existing@example.com",
+            "email": "existing@gmail.com",
             "password": VALID_PASSWORD,
             "confirm_password": VALID_PASSWORD,
             "account_type": "individual",
@@ -123,7 +123,7 @@ class TestOtpVerification:
         return response, otp_token, token_data["otp"]
 
     def test_valid_otp_activates_account(self, client):
-        _, otp_token, otp = self._register_and_get_otp(client, "otpvalid@example.com")
+        _, otp_token, otp = self._register_and_get_otp(client, "otpvalid@gmail.com")
         client.cookies.set("otp_token", otp_token)
 
         response = client.post("/auth/verify-otp", json={"otp": otp})
@@ -131,7 +131,7 @@ class TestOtpVerification:
         assert response.json()["message"] == "Account verified and activated successfully."
 
     def test_invalid_otp_rejected(self, client):
-        _, otp_token, otp = self._register_and_get_otp(client, "otpinvalid@example.com")
+        _, otp_token, otp = self._register_and_get_otp(client, "otpinvalid@gmail.com")
         client.cookies.set("otp_token", otp_token)
 
         response = client.post("/auth/verify-otp", json={"otp": "000000"})
@@ -158,7 +158,7 @@ class TestOtpVerification:
         assert response.status_code == 400
 
     def test_max_retry_exceeded(self, client):
-        _, otp_token, otp = self._register_and_get_otp(client, "otpmaxretry@example.com")
+        _, otp_token, otp = self._register_and_get_otp(client, "otpmaxretry@gmail.com")
         client.cookies.set("otp_token", otp_token)
 
         # Explicitly carry forward the updated otp_token cookie after each attempt
@@ -173,7 +173,7 @@ class TestOtpVerification:
         assert response.status_code == 429
         
     def test_resend_otp_generates_new_otp(self, client):
-        _, otp_token, original_otp = self._register_and_get_otp(client, "otpresend@example.com")
+        _, otp_token, original_otp = self._register_and_get_otp(client, "otpresend@gmail.com")
         client.cookies.set("otp_token", otp_token)
 
         resend_response = client.post("/auth/resend-otp", json={"purpose": "registration"})
@@ -205,15 +205,15 @@ class TestLogin:
         client.cookies.delete("otp_token")
 
     def test_valid_login_success(self, client):
-        self._register_and_activate(client, "loginvalid@example.com")
-        response = client.post("/auth/login", json={"email": "loginvalid@example.com", "password": VALID_PASSWORD})
+        self._register_and_activate(client, "loginvalid@gmail.com")
+        response = client.post("/auth/login", json={"email": "loginvalid@gmail.com", "password": VALID_PASSWORD})
         assert response.status_code == 200
         assert extract_cookie(response, "access_token") is not None
         assert extract_cookie(response, "refresh_token") is not None
 
     def test_invalid_password_fails(self, client):
-        self._register_and_activate(client, "loginwrongpass@example.com")
-        response = client.post("/auth/login", json={"email": "loginwrongpass@example.com", "password": "WrongPass@1"})
+        self._register_and_activate(client, "loginwrongpass@gmail.com")
+        response = client.post("/auth/login", json={"email": "loginwrongpass@gmail.com", "password": "WrongPass@1"})
         assert response.status_code == 401
 
     def test_nonexistent_email_fails(self, client):
@@ -256,7 +256,7 @@ class TestLogout:
         # simpler: just decode from register response directly instead
         register_resp = client.post("/auth/register", json={
             "full_name": "Logout Test2",
-            "email": "logouttest2@example.com",
+            "email": "logouttest2@gmail.com",
             "password": VALID_PASSWORD,
             "confirm_password": VALID_PASSWORD,
             "account_type": "individual",
@@ -268,7 +268,7 @@ class TestLogout:
         client.post("/auth/verify-otp", json={"otp": otp})
         client.cookies.delete("otp_token")
 
-        login_resp = client.post("/auth/login", json={"email": "logouttest2@example.com", "password": VALID_PASSWORD})
+        login_resp = client.post("/auth/login", json={"email": "logouttest2@gmail.com", "password": VALID_PASSWORD})
         client.cookies.set("access_token", extract_cookie(login_resp, "access_token"))
 
         first_logout = client.post("/auth/logout")
@@ -296,9 +296,9 @@ class TestForgotPassword:
         client.cookies.delete("otp_token")
 
     def test_full_forgot_password_flow(self, client):
-        self._register_and_activate(client, "forgotflow@example.com")
+        self._register_and_activate(client, "forgotflow@gmail.com")
 
-        forgot_resp = client.post("/auth/forgot-password", json={"email": "forgotflow@example.com"})
+        forgot_resp = client.post("/auth/forgot-password", json={"email": "forgotflow@gmail.com"})
         assert forgot_resp.status_code == 200
         forgot_otp_token = extract_cookie(forgot_resp, "forgot_otp_token")
         assert forgot_otp_token is not None
@@ -320,11 +320,11 @@ class TestForgotPassword:
         client.cookies.delete("reset_token")
 
         # New password should work
-        login_new = client.post("/auth/login", json={"email": "forgotflow@example.com", "password": "NewPass@123"})
+        login_new = client.post("/auth/login", json={"email": "forgotflow@gmail.com", "password": "NewPass@123"})
         assert login_new.status_code == 200
 
         # Old password should fail
-        login_old = client.post("/auth/login", json={"email": "forgotflow@example.com", "password": VALID_PASSWORD})
+        login_old = client.post("/auth/login", json={"email": "forgotflow@gmail.com", "password": VALID_PASSWORD})
         assert login_old.status_code == 401
 
     def test_forgot_password_nonexistent_email_generic_response(self, client):
